@@ -1,10 +1,16 @@
-from fastapi import FastAPI
-from routes import router
+from flask import Flask
+from routes import router  # Assurez-vous que ce module est compatible avec Flask
 
-app = FastAPI()
+app = Flask(__name__)
 
-app.include_router(router)
+# Enregistrement des routes
+app.register_blueprint(router)
 
-@app.get("/")
+@app.route("/", methods=["GET"])
 def read_root():
     return {"message": "Welcome to Sportify API!"}
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+    

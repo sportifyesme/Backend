@@ -8,3 +8,8 @@ SQLALCHEMY_DATABASE_URL = "mysql+pymysql://sportify:sportify2@localhost/sportify
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Pour créer toutes les tables à partir de vos modèles
+def init_db():
+    Base.metadata.create_all(bind=engine)
+    
