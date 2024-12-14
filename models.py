@@ -1,10 +1,10 @@
-from sqlalchemy import Column, Integer, String, Enum, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, String, Enum, ForeignKey, DateTime, Float, Text, Boolean
 from sqlalchemy.orm import relationship
 from database import Base
 
 class User(Base):
     __tablename__ = 'utilisateurs'
-    
+
     id = Column(Integer, primary_key=True, index=True)
     nom_utilisateur = Column(String(255), unique=True, index=True)
     email = Column(String(255), unique=True, index=True)
@@ -12,47 +12,48 @@ class User(Base):
     sport = Column(String(100))
     niveau = Column(Enum('Débutant', 'Intermédiaire', 'Avancé'))
     date_inscription = Column(DateTime, server_default='CURRENT_TIMESTAMP')
+    stats = relationship("Stat", back_populates="utilisateur")
+    matchs = relationship("Match", back_populates="organisateur")
 
-    # Relation avec les événements créés
-    evenements = relationship("Event", back_populates="organisateur")
-    activites = relationship("Activity", back_populates="utilisateur")
+class Match(Base):
+    __tablename__ = 'matchs'
 
+    id = Column(Integer, primary_key=True, index=True)
+    titre = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    date = Column(DateTime, nullable=False)
+    lieu = Column(String(255), nullable=False)
+    id_organisateur = Column(Integer, ForeignKey('utilisateurs.id'), nullable=False)
+    niveau = Column(Enum('Débutant', 'Intermédiaire', 'Avancé'))  # Niveau requis
+    max_participants = Column(Integer, nullable=False)  # Nombre maximum de participants
+    participants = relationship("Participant", back_populates="match")
+    organisateur = relationship("User", back_populates="matchs")
 
 class Event(Base):
     __tablename__ = 'evenements'
-    
+
     id = Column(Integer, primary_key=True, index=True)
     titre = Column(String(255), nullable=False)
-    description = Column(Text)
+    description = Column(Text, nullable=True)
     date = Column(DateTime, nullable=False)
     lieu = Column(String(255), nullable=False)
     id_organisateur = Column(Integer, ForeignKey('utilisateurs.id'))
+    is_admin_event = Column(Boolean, default=True)
 
-    # Relation avec l'utilisateur
-    organisateur = relationship("User", back_populates="evenements")
+class Participant(Base):
+    __tablename__ = 'participants'
 
-
-class Activity(Base):
-    __tablename__ = 'activites'
-    
     id = Column(Integer, primary_key=True, index=True)
-    type_activite = Column(String(100))
-    duree = Column(Integer)  # Durée en minutes
-    date = Column(DateTime, nullable=False)
-    id_utilisateur = Column(Integer, ForeignKey('utilisateurs.id'))
+    match_id = Column(Integer, ForeignKey('matchs.id'))
+    user_id = Column(Integer, ForeignKey('utilisateurs.id'))
+    match = relationship("Match", back_populates="participants")
 
-    # Relation avec l'utilisateur
-    utilisateur = relationship("User", back_populates="activites")
+class Stat(Base):
+    __tablename__ = 'statistiques'
 
-
-class Matchmaking(Base):
-    __tablename__ = 'matchmaking'
-    
     id = Column(Integer, primary_key=True, index=True)
-    id_utilisateur_1 = Column(Integer, ForeignKey('utilisateurs.id'))
-    id_utilisateur_2 = Column(Integer, ForeignKey('utilisateurs.id'))
-    date_creation = Column(DateTime, server_default='CURRENT_TIMESTAMP')
-
-    # Relations pour les utilisateurs
-    utilisateur_1 = relationship("User", foreign_keys=[id_utilisateur_1])
-    utilisateur_2 = relationship("User", foreign_keys=[id_utilisateur_2])
+    user_id = Column(Integer, ForeignKey('utilisateurs.id'))
+    categorie = Column(String(255))
+    valeur = Column(Float)
+    date = Column(DateTime, server_default='CURRENT_TIMESTAMP')
+    utilisateur = relationship("User", back_populates="stats")
