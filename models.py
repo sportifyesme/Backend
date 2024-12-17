@@ -26,6 +26,7 @@ class Match(Base):
     id_organisateur = Column(Integer, ForeignKey('utilisateurs.id'), nullable=False)
     niveau = Column(Enum('Débutant', 'Intermédiaire', 'Avancé'))  # Niveau requis
     max_participants = Column(Integer, nullable=False)  # Nombre maximum de participants
+    sport = Column(String(50), nullable=False)
     participants = relationship("Participant", back_populates="match")
     organisateur = relationship("User", back_populates="matchs")
 
@@ -47,6 +48,7 @@ class Participant(Base):
     match_id = Column(Integer, ForeignKey('matchs.id'))
     user_id = Column(Integer, ForeignKey('utilisateurs.id'))
     match = relationship("Match", back_populates="participants")
+    user = relationship("User", backref="participants")
 
 class Stat(Base):
     __tablename__ = 'statistiques'
@@ -55,5 +57,6 @@ class Stat(Base):
     user_id = Column(Integer, ForeignKey('utilisateurs.id'))
     categorie = Column(String(255))
     valeur = Column(Float)
+    sport = Column(String(100))
     date = Column(DateTime, server_default='CURRENT_TIMESTAMP')
     utilisateur = relationship("User", back_populates="stats")

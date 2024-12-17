@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from database import SessionLocal
 from models import User, Match, Event, Participant, Stat
+import matplotlib.pyplot as plt  # Pour dessiner des graphiques
+import io  # Pour gérer les entrées/sorties en mémoire
+import base64
 from pyfcm import FCMNotification
 import requests
 
@@ -163,7 +166,8 @@ def create_match():
             lieu=match_data["lieu"],
             niveau=match_data["niveau"],  # "Débutant", "Intermédiaire", ou "Avancé"
             max_participants=match_data["max_participants"],
-            id_organisateur=match_data["id_organisateur"]
+            id_organisateur=match_data["id_organisateur"],
+            sport=match_data["sport"]
         )
         db.add(match)
         db.commit()
@@ -238,12 +242,170 @@ def list_matches():
             "date": match.date,
             "lieu": match.lieu,
             "niveau": match.niveau,
+            "sport":match.sport,
             "max_participants": match.max_participants,
             "id_organisateur": match.id_organisateur,
             "organisateur_nom": match.organisateur.nom_utilisateur
         } for match in matches]), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+    finally:
+        db.close()
+
+
+#API : récuperer les participants : MatchmakingAdapter
+@router.route("/api/match/<int:match_id>/participants", methods=["GET"])
+def get_match_participants(match_id):
+    db: Session = SessionLocal()
+    try:
+        # Récupérer les participants avec les informations sur les utilisateurs
+        participants = (
+            db.query(Participant)
+            .filter(Participant.match_id == match_id)
+            .join(User, Participant.user_id == User.id)
+            .join(Match, Participant.match_id == Match.id)  # Ajouter une jointure avec Match pour récupérer le sport
+            .all()
+        )
+
+        # Construire la liste des participants avec leur ID, nom d'utilisateur et le sport du match
+        response_data = [
+            {
+                "id": participant.user.id,  # ID utilisateur
+                "nom_utilisateur": participant.user.nom_utilisateur,  # Nom d'utilisateur
+                "sport": participant.match.sport  # Sport du match
+            }
+            for participant in participants
+        ]
+
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Une erreur est survenue : {str(e)}"}), 500
+    finally:
+        db.close()
+
+
+#API statistique : Permet à l'utilisateur d'ajouter une statistique
+@router.route("/api/stats", methods=["POST"])
+def add_stat():
+    data = request.json
+    db: Session = SessionLocal()
+
+    try:
+        # Validation des données
+        if not data.get("user_id") or not data.get("categorie") or not data.get("valeur") or not data.get("sport"):
+            return jsonify({"error": "Les champs 'user_id', 'categorie', 'valeur', et 'sport' sont obligatoires."}), 400
+
+        # Ajouter la statistique
+        new_stat = Stat(
+            user_id=data["user_id"],
+            categorie=data["categorie"],
+            valeur=data["valeur"],
+            sport=data["sport"]
+        )
+        db.add(new_stat)
+        db.commit()
+        db.refresh(new_stat)
+
+        return jsonify({"message": "Statistique ajoutée avec succès.", "stat_id": new_stat.id}), 201
+
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+#API statistique : Récupérer les statistiques d'un utilisateur
+@router.route("/api/stats/<int:user_id>", methods=["GET"])
+def get_user_stats(user_id):
+    db: Session = SessionLocal()
+
+    try:
+        stats = db.query(Stat).filter(Stat.user_id == user_id).all()
+        if not stats:
+            return jsonify({"error": "Aucune statistique trouvée pour cet utilisateur."}), 404
+
+        return jsonify([{"categorie": stat.categorie, "valeur": stat.valeur, "sport": stat.sport} for stat in stats]), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        db.close()
+
+
+#API statistique : Visualiser les statistiques d'un utilisateur : Graphique circulaire et graphique à barres.
+@router.route("/api/stats/<int:user_id>/graphs", methods=["GET"])
+def get_stats_graphs(user_id):
+    db: Session = SessionLocal()
+
+    try:
+        stats = db.query(Stat).filter(Stat.user_id == user_id).all()
+        if not stats:
+            return jsonify({"error": "Aucune statistique trouvée pour cet utilisateur."}), 404
+
+        categories = [stat.categorie for stat in stats]
+        valeurs = [stat.valeur for stat in stats]
+
+        plt.ioff()  # Désactiver l'interface interactive
+
+        # Graphique circulaire
+        plt.figure(figsize=(8, 6))
+        plt.pie(valeurs, labels=categories, autopct='%1.1f%%', startangle=90)
+        plt.axis('equal') 
+        pie_buf = io.BytesIO()
+        plt.savefig(pie_buf, format='png')
+        pie_buf.seek(0)
+        pie_graph_base64 = base64.b64encode(pie_buf.getvalue()).decode('utf-8')
+        pie_buf.close()
+        plt.close()
+
+        # Graphique à barres
+        plt.figure(figsize=(10, 5))
+        plt.bar(categories, valeurs, color='skyblue')
+        plt.xlabel('Catégories')
+        plt.ylabel('Valeurs')
+        plt.title("Performances par Catégorie")
+        bar_buf = io.BytesIO()
+        plt.savefig(bar_buf, format='png')
+        bar_buf.seek(0)
+        bar_graph_base64 = base64.b64encode(bar_buf.getvalue()).decode('utf-8')
+        bar_buf.close()
+        plt.close()
+
+        return jsonify({
+            "stats": [{"categorie": stat.categorie, "valeur": stat.valeur} for stat in stats],
+            "pie_graph": pie_graph_base64,
+            "bar_graph": bar_graph_base64
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        db.close()
+
+
+#API statistique : Récupérer les historiques des statistiques.
+@router.route("/api/stats/history/<int:user_id>", methods=["GET"])
+def get_stats_history(user_id):
+    db: Session = SessionLocal()
+
+    try:
+        stats = db.query(Stat).filter(Stat.user_id == user_id).all()
+        if not stats:
+            return jsonify({"error": "Aucune statistique trouvée."}), 404
+
+        return jsonify([{
+            "categorie": stat.categorie,
+            "valeur": stat.valeur,
+            "sport": stat.sport,
+            "date": stat.date.strftime("%Y-%m-%d %H:%M:%S")  # Format de la date
+        } for stat in stats]), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         db.close()
 
