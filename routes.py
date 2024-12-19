@@ -12,7 +12,7 @@ import requests
 router = Blueprint('router', __name__)
 
 
-#API d'inscription : fragment_register
+#API d'inscription : Inscription d'un utilisateur -> fragment_register
 @router.route("/api/register", methods=["POST"])
 def register_user():
     user_data = request.json
@@ -64,7 +64,7 @@ def register_user():
     finally:
         db.close()
 
-#Connexion d'un utilisateur : fragment_login
+#API de connexion : Connexion d'un utilisateur -> fragment_login
 @router.route("/api/login", methods=["POST"])
 def login_user():
     user_data = request.json
@@ -83,7 +83,7 @@ def login_user():
         db.close()
 
 
-#Récupération des Utilisateurs : fragment_home
+#API de Récupération des Utilisateurs -> fragment_home
 @router.route("/api/users", methods=["GET"])
 def get_users():
     db: Session = SessionLocal()
@@ -102,7 +102,7 @@ def get_users():
         db.close()
 
 
-#API de Profil utilisateur : fragment_home
+#API de Profil utilisateur -> fragment_home
 @router.route("/api/users/<int:user_id>", methods=["GET"])
 def get_user(user_id):
     db: Session = SessionLocal()
@@ -123,7 +123,7 @@ def get_user(user_id):
         db.close()
 
 
-#Mise à Jour des Données Utilisateur : fragment_home
+#Mise à Jour des Données Utilisateur -> fragment_home
 @router.route("/api/users/<int:user_id>", methods=["PUT"])
 def update_user(user_id):
     user_data = request.json
@@ -147,7 +147,7 @@ def update_user(user_id):
         db.close()        
 
 
-#API pour créer un match : activity_create_match
+#API : créer un match -> activity_create_match
 @router.route("/api/match/create", methods=["POST"])
 def create_match():
     match_data = request.json
@@ -180,7 +180,7 @@ def create_match():
         db.close()
 
 
-#API : rejoindre un match : activity_join_match
+#API : rejoindre un match -> activity_join_match
 @router.route("/api/match/join", methods=["POST"])
 def join_match():
     join_data = request.json
@@ -229,7 +229,7 @@ def join_match():
         db.close()
 
 
-#API : récuperer les matchs : activity_join_match
+#API : récuperer les matchs -> activity_join_match
 @router.route("/api/match/list", methods=["GET"])
 def list_matches():
     db: Session = SessionLocal()
@@ -285,7 +285,7 @@ def get_match_participants(match_id):
         db.close()
 
 
-#API statistique : Permet à l'utilisateur d'ajouter une statistique
+#API : Ajouter les statistiques -> FragmentStats
 @router.route("/api/stats", methods=["POST"])
 def add_stat():
     data = request.json
@@ -293,16 +293,25 @@ def add_stat():
 
     try:
         # Validation des données
-        if not data.get("user_id") or not data.get("categorie") or not data.get("valeur") or not data.get("sport"):
-            return jsonify({"error": "Les champs 'user_id', 'categorie', 'valeur', et 'sport' sont obligatoires."}), 400
-
-        # Ajouter la statistique
+        if not data.get("user_id") or not data.get("categorie") or not data.get("sport"):
+            return jsonify({"error": "Les champs 'user_id', 'categorie', et 'sport' sont obligatoires."}), 400
+        
+        # Ajouter la statistique avec seulement les champs fournis
         new_stat = Stat(
             user_id=data["user_id"],
             categorie=data["categorie"],
-            valeur=data["valeur"],
-            sport=data["sport"]
+            sport=data["sport"],
+            buts=data.get("buts") or 0,  # Mettre à 0 si non fourni
+            passes_decisives=data.get("passes_decisives") or 0,
+            minutes_jouees=data.get("minutes_jouees") or 0,
+            rebonds=data.get("rebonds") or 0,  # Pour le Basketball
+            aces=data.get("aces") or 0,  # Pour le Tennis
+            double_faults=data.get("double_faults") or 0,
+            games_won=data.get("games_won") or 0,
+            distance_swum=data.get("distance_swum") or 0,  # Pour la Natation
+            strokes=data.get("strokes") or 0
         )
+        
         db.add(new_stat)
         db.commit()
         db.refresh(new_stat)
@@ -316,80 +325,81 @@ def add_stat():
         db.close()
 
 
-#API statistique : Récupérer les statistiques d'un utilisateur
-@router.route("/api/stats/<int:user_id>", methods=["GET"])
-def get_user_stats(user_id):
-    db: Session = SessionLocal()
-
-    try:
-        stats = db.query(Stat).filter(Stat.user_id == user_id).all()
-        if not stats:
-            return jsonify({"error": "Aucune statistique trouvée pour cet utilisateur."}), 404
-
-        return jsonify([{"categorie": stat.categorie, "valeur": stat.valeur, "sport": stat.sport} for stat in stats]), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        db.close()
-
-
-#API statistique : Visualiser les statistiques d'un utilisateur : Graphique circulaire et graphique à barres.
-@router.route("/api/stats/<int:user_id>/graphs", methods=["GET"])
-def get_stats_graphs(user_id):
-    db: Session = SessionLocal()
-
-    try:
-        stats = db.query(Stat).filter(Stat.user_id == user_id).all()
-        if not stats:
-            return jsonify({"error": "Aucune statistique trouvée pour cet utilisateur."}), 404
-
-        categories = [stat.categorie for stat in stats]
-        valeurs = [stat.valeur for stat in stats]
-
-        plt.ioff()  # Désactiver l'interface interactive
-
-        # Graphique circulaire
-        plt.figure(figsize=(8, 6))
-        plt.pie(valeurs, labels=categories, autopct='%1.1f%%', startangle=90)
-        plt.axis('equal') 
-        pie_buf = io.BytesIO()
-        plt.savefig(pie_buf, format='png')
-        pie_buf.seek(0)
-        pie_graph_base64 = base64.b64encode(pie_buf.getvalue()).decode('utf-8')
-        pie_buf.close()
-        plt.close()
-
-        # Graphique à barres
-        plt.figure(figsize=(10, 5))
-        plt.bar(categories, valeurs, color='skyblue')
-        plt.xlabel('Catégories')
-        plt.ylabel('Valeurs')
-        plt.title("Performances par Catégorie")
-        bar_buf = io.BytesIO()
-        plt.savefig(bar_buf, format='png')
-        bar_buf.seek(0)
-        bar_graph_base64 = base64.b64encode(bar_buf.getvalue()).decode('utf-8')
-        bar_buf.close()
-        plt.close()
-
-        return jsonify({
-            "stats": [{"categorie": stat.categorie, "valeur": stat.valeur} for stat in stats],
-            "pie_graph": pie_graph_base64,
-            "bar_graph": bar_graph_base64
-        }), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    finally:
-        db.close()
-
-
-#API statistique : Récupérer les historiques des statistiques.
+#API statistique : Récupérer l'historique des statistiques -> FragmentStats
 @router.route("/api/stats/history/<int:user_id>", methods=["GET"])
 def get_stats_history(user_id):
+    db: Session = SessionLocal()
+
+    try:
+        # Récupérer toutes les statistiques pour un utilisateur donné
+        stats = db.query(Stat).filter(Stat.user_id == user_id).all()
+
+        if not stats:
+            return jsonify({"error": "Aucune statistique trouvée pour cet utilisateur."}), 404
+
+        # Renvoie les statistiques avec dates, catégories, et d'autres informations
+        response_data = []
+        for stat in stats:
+            stat_data = {
+                "categorie": stat.categorie,
+                "sport": stat.sport,
+                "date": stat.date.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            # Inclure les champs pertinents pour chaque sport
+            if stat.sport == "Football":
+                stat_data.update({
+                    "buts": stat.buts,
+                    "passes_decisives": stat.passes_decisives,
+                    "minutes_jouees": stat.minutes_jouees
+                })
+            elif stat.sport == "Basketball":
+                stat_data.update({
+                    "buts": stat.buts,
+                    "passes_decisives": stat.passes_decisives,
+                    "rebonds": stat.rebonds,
+                    "minutes_jouees": stat.minutes_jouees
+                })
+            elif stat.sport == "Tennis":
+                stat_data.update({
+                    "aces": stat.aces,
+                    "double_faults": stat.double_faults,
+                    "games_won": stat.games_won,
+                    "minutes_jouees": stat.minutes_jouees
+                })
+            elif stat.sport == "Natation":
+                stat_data.update({
+                    "distance_swum": stat.distance_swum,
+                    "strokes": stat.strokes,
+                    "minutes_jouees": stat.minutes_jouees
+                })
+
+            response_data.append(stat_data)
+        
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        db.close()
+
+
+
+    db: Session = SessionLocal()
+
+    try:
+        stats = db.query(Stat).filter(Stat.user_id == user_id).all()
+        if not stats:
+            return jsonify({"error": "Aucune statistique trouvée pour cet utilisateur."}), 404
+
+        return jsonify([{"categorie": stat.categorie, "valeur": stat.valeur} for stat in stats]), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        db.close()
+
+
     db: Session = SessionLocal()
 
     try:
@@ -410,9 +420,7 @@ def get_stats_history(user_id):
         db.close()
 
 
-# API pour obtenir tous les événements : fragment_events
-@router.route("/api/events", methods=["GET"])
-def get_events():
+
     db = SessionLocal()
     try:
         events = db.query(Event).all()
@@ -428,7 +436,7 @@ def get_events():
         db.close()
 
 
-#API pour supprimer les utilisateurs et les matchs
+#API pour supprimer toutes les tables
 @router.route("/api/admin/clear", methods=["DELETE"])
 def clear_data():
     db: Session = SessionLocal()
@@ -440,7 +448,7 @@ def clear_data():
         db.query(Match).delete()
 
         # Supprimer les utilisateurs
-        db.query(Utilisateur).delete()
+        db.query(User).delete()
 
         db.commit()
         return jsonify({"message": "Toutes les données ont été supprimées avec succès"}), 200

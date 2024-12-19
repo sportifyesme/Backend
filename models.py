@@ -56,7 +56,23 @@ class Stat(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey('utilisateurs.id'))
     categorie = Column(String(255))
-    valeur = Column(Float)
     sport = Column(String(100))
     date = Column(DateTime, server_default='CURRENT_TIMESTAMP')
     utilisateur = relationship("User", back_populates="stats")
+
+    # Champs spécifiques au Football
+    buts = Column(Integer, default=0)  # Nombre de buts
+    passes_decisives = Column(Integer, default=0)  # Nombre de passes décisives
+    minutes_jouees = Column(Integer, default=0)  # Minutes jouées
+
+    # Champs spécifiques au Basket
+    rebonds = Column(Integer, default=0)  # Nombre de rebonds
+
+    # Champs spécifiques au Tennis
+    aces = Column(Integer, default=0)  # Nombre d'aces
+    double_faults = Column(Integer, default=0)  # Nombre de double fautes
+    games_won = Column(Integer, default=0)  # Nombre de jeux gagnés
+
+    # Champs spécifiques à la Natation
+    distance_swum = Column(Float, default=0)  # Distance nagée en mètres
+    strokes = Column(Integer, default=0)  # Nombre de mouvements de nage
